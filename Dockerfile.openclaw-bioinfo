@@ -1,0 +1,93 @@
+# ============================================
+# OpenClaw Bioinformatics Environment
+# ============================================
+
+FROM alpine/openclaw:latest
+
+USER root
+
+LABEL maintainer="yuxin.jia"
+LABEL description="OpenClaw with bioinformatics tools - slim version"
+LABEL version="3.0.0-slim"
+
+# ============================================
+# 安装系统依赖
+# ============================================
+RUN apt-get update && apt-get install -y \
+    bzip2 \
+    liblzma-dev \
+    libbz2-dev \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    zlib1g-dev \
+    default-jre \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================
+# 安装Micromamba（使用本地文件）
+# ============================================
+COPY micromamba-2.5.0-2.tar.bz2 /tmp/micromamba.tar.bz2
+RUN tar -xjf /tmp/micromamba.tar.bz2 -C /tmp && \
+    mv /tmp/bin/micromamba /usr/local/bin/ && \
+    chmod +x /usr/local/bin/micromamba && \
+    rm -rf /tmp/micromamba.tar.bz2 /tmp/bin /tmp/info
+
+# ============================================
+# 创建目录结构
+# ============================================
+RUN mkdir -p /opt/bioenvs \
+             /root/micromamba/envs \
+             /root/.config/openclaw \
+             /root/.local/share/openclaw/skills \
+             /data \
+             /workspace
+
+# ============================================
+# 配置Micromamba使用国内镜像源
+# ============================================
+RUN micromamba config append channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/bioconda/ && \
+    micromamba config append channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge/ && \
+    micromamba config append channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/ && \
+    micromamba config append channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r/ && \
+    micromamba config append envs_dirs /opt/bioenvs && \
+    micromamba config append envs_dirs /root/micromamba/envs
+
+# ============================================
+# 环境1: bioenv - 基础工具
+# samtools, bedtools, python, pip
+# ============================================
+RUN micromamba create -n bioenv -y \
+    samtools \
+    bedtools \
+    python \
+    pip && \
+    micromamba clean -a -y
+
+
+
+# ============================================
+# 初始化Shell环境
+# ============================================
+RUN micromamba shell init -s bash
+
+# ============================================
+# 设置工作目录
+# ============================================
+WORKDIR /workspace
+
+# ============================================
+# 设置环境变量
+# ============================================
+ENV MICROMAMBA_ROOT_PREFIX=/root/micromamba
+ENV OPENCLAW_MODE=${OPENCLAW_MODE:-tui}
+
+# ============================================
+# 添加启动脚本
+# ============================================
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# ============================================
+# 默认命令
+# ============================================
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

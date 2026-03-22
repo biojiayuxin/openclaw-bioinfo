@@ -227,7 +227,13 @@ generate_config() {
     "controlUi": {
       "allowedOrigins": [
         "http://localhost:18789",
-        "http://127.0.0.1:18789"
+        "http://127.0.0.1:18789",
+        "http://localhost:28080",
+        "http://127.0.0.1:28080",
+        "http://localhost:38080",
+        "http://127.0.0.1:38080",
+        "http://localhost:48080",
+        "http://127.0.0.1:48080"
       ]
     },
     "auth": {
@@ -254,9 +260,9 @@ EOF
 # 生成 run_openclaw_bioinfo.sh
 generate_run_script() {
     info "生成启动脚本..."
-    
+
     local run_script="$INSTALL_DIR/run_openclaw_bioinfo.sh"
-    
+
     cat > "$run_script" << 'RUNSCRIPT'
 #!/bin/bash
 
@@ -265,7 +271,8 @@ generate_run_script() {
 # ============================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SIF_FILE="${SCRIPT_DIR}/openclaw-bioinfo-slim.sif"
+SIF_FILE="${SCRIPT_DIR}/openclaw-bioinfo-feishu.sif"
+PINCHCHAT_PORT="${PINCHCHAT_PORT:-18080}"
 
 # 默认模式
 OPENCLAW_MODE=""
@@ -274,7 +281,15 @@ EXTRA_ARGS=""
 # 解析参数
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -p|--pinchchat)
+            OPENCLAW_MODE="pinchchat"
+            shift
+            ;;
         -d|--dashboard)
+            OPENCLAW_MODE="dashboard"
+            shift
+            ;;
+        -g|--gateway)
             OPENCLAW_MODE="dashboard"
             shift
             ;;
@@ -286,13 +301,20 @@ while [[ $# -gt 0 ]]; do
             echo "用法: $0 [选项]"
             echo ""
             echo "选项:"
-            echo "  -d, --dashboard    启动 Dashboard 模式 (Web界面)"
-            echo "  -t, --tui          启动 TUI 模式 (终端界面，默认)"
-            echo "  -h, --help         显示此帮助信息"
+            echo "  -p, --pinchchat   启动 PinchChat 模式 (双端口，推荐)"
+            echo "  -d, --dashboard   启动 Dashboard 模式 (兜底)"
+            echo "  -g, --gateway     仅启动 Gateway（适合飞书机器人）"
+            echo "  -t, --tui         启动 TUI 模式 (终端界面，默认)"
+            echo "  -h, --help        显示此帮助信息"
+            echo ""
+            echo "环境变量:"
+            echo "  PINCHCHAT_PORT    PinchChat 静态页面端口 (默认: 18080)"
             echo ""
             echo "示例:"
-            echo "  $0                 # 默认启动 TUI 模式"
-            echo "  $0 --dashboard     # 启动 Dashboard 模式"
+            echo "  $0                  # 默认启动 TUI 模式"
+            echo "  $0 --pinchchat      # 启动 PinchChat 模式"
+            echo "  $0 --dashboard      # 启动 Dashboard 模式"
+            echo "  $0 --gateway        # 仅启动 Gateway（飞书接入推荐）"
             exit 0
             ;;
         *)
@@ -311,8 +333,8 @@ echo ""
 if ! command -v apptainer &> /dev/null; then
     echo "错误: 未找到 apptainer"
     echo ""
-    echo "请安装 Apptainer："
-    echo "  conda create -n apptainer -c conda-forge apptainer"
+    echo "请安装或激活 Apptainer："
+    echo "  conda activate apptainer"
     exit 1
 fi
 
@@ -328,7 +350,7 @@ echo ""
 if [ ! -f "${SIF_FILE}" ]; then
     echo "错误: SIF文件不存在: ${SIF_FILE}"
     echo ""
-    echo "请将 openclaw-bioinfo-slim.sif 文件放置到以下目录:"
+    echo "请将 openclaw-bioinfo-feishu.sif 文件放置到以下目录:"
     echo "  ${SCRIPT_DIR}"
     exit 1
 fi
@@ -342,6 +364,10 @@ fi
 
 echo "SIF文件: ${SIF_FILE}"
 echo "配置目录: ${SCRIPT_DIR}"
+if [ "$OPENCLAW_MODE" = "pinchchat" ]; then
+    echo "PinchChat 页面端口: ${PINCHCHAT_PORT}"
+    echo "Gateway 端口: 18789"
+fi
 echo ""
 echo "启动中..."
 echo ""
@@ -357,14 +383,13 @@ echo ""
 # 构建环境变量参数
 ENV_ARGS=""
 if [ -n "$OPENCLAW_MODE" ]; then
-    ENV_ARGS="--env OPENCLAW_MODE=${OPENCLAW_MODE}"
+    ENV_ARGS="--env OPENCLAW_MODE=${OPENCLAW_MODE} --env PINCHCHAT_PORT=${PINCHCHAT_PORT}"
 fi
 
 apptainer run \
     --no-home \
     $ENV_ARGS \
     --bind "${SCRIPT_DIR}/openclaw_config:/root/.openclaw" \
-    --bind "${SCRIPT_DIR}/workspace:/root/.openclaw/workspace" \
     --bind "${SCRIPT_DIR}/skills:/skills" \
     --bind "${SCRIPT_DIR}/micromamba_envs:/root/micromamba/envs" \
     --bind "${SCRIPT_DIR}/micromamba_pkgs:/root/micromamba/pkgs" \
@@ -375,10 +400,196 @@ apptainer run \
     "${SIF_FILE}" \
     $EXTRA_ARGS
 RUNSCRIPT
-    
+
     chmod +x "$run_script"
-    
+
     success "启动脚本生成完成: $run_script"
+}
+
+# 生成 run_openclaw_add_feishu.sh
+generate_feishu_script() {
+    info "生成飞书管理脚本..."
+
+    local feishu_script="$INSTALL_DIR/run_openclaw_add_feishu.sh"
+
+    cat > "$feishu_script" << 'FEISHUSCRIPT'
+#!/bin/bash
+
+# ============================================
+# OpenClaw 飞书插件安装/审批/功能开关脚本（SIF）
+# ============================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SIF_FILE="${SCRIPT_DIR}/openclaw-bioinfo-feishu.sif"
+
+DO_INSTALL=0
+DO_APPROVE=0
+APPROVE_ID=""
+
+ENABLE_STREAMING=0
+ENABLE_CARD_MORE=0
+ENABLE_THREAD_SESSION=0
+ENABLE_REQUIRE_MENTION=0
+ENABLE_OPEN_ALL=0
+
+show_help() {
+    echo "用法: $0 [参数]"
+    echo ""
+    echo "核心参数:"
+    echo "  --install                 安装/配置飞书官方插件"
+    echo "  --approve <feishu_id>     执行配对审批: openclaw pairing approve feishu <feishu_id>"
+    echo ""
+    echo "飞书功能开关（可单独使用，也可与 --install 组合）:"
+    echo "  --streaming               开启流式输出 (channels.feishu.streaming=true)"
+    echo "  --card_more               开启卡片更多信息 (footer.elapsed/status=true)"
+    echo "  --thread_session          开启多任务并行/独立上下文 (threadSession=true)"
+    echo "  --require_mention         开启群内仅 @ 才回复 (requireMention=true)"
+    echo "  --open_all                一次性开启以上全部功能"
+    echo ""
+    echo "其他:"
+    echo "  -h, --help                显示帮助"
+}
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --install)
+            DO_INSTALL=1
+            shift
+            ;;
+        --approve)
+            DO_APPROVE=1
+            APPROVE_ID="$2"
+            shift 2
+            ;;
+        --streaming)
+            ENABLE_STREAMING=1
+            shift
+            ;;
+        --card_more)
+            ENABLE_CARD_MORE=1
+            shift
+            ;;
+        --thread_session)
+            ENABLE_THREAD_SESSION=1
+            shift
+            ;;
+        --require_mention)
+            ENABLE_REQUIRE_MENTION=1
+            shift
+            ;;
+        --open_all)
+            ENABLE_OPEN_ALL=1
+            shift
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            echo "错误: 未知参数 $1"
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+if [ "$DO_INSTALL" -eq 1 ] && [ "$DO_APPROVE" -eq 1 ]; then
+    echo "错误: --install 与 --approve 不能同时使用"
+    exit 1
+fi
+
+if [ "$DO_APPROVE" -eq 1 ] && [ -z "$APPROVE_ID" ]; then
+    echo "错误: --approve 需要提供 feishu_id"
+    show_help
+    exit 1
+fi
+
+if [ "$ENABLE_OPEN_ALL" -eq 1 ]; then
+    ENABLE_STREAMING=1
+    ENABLE_CARD_MORE=1
+    ENABLE_THREAD_SESSION=1
+    ENABLE_REQUIRE_MENTION=1
+fi
+
+HAS_FEATURE_TOGGLES=0
+if [ "$ENABLE_STREAMING" -eq 1 ] || [ "$ENABLE_CARD_MORE" -eq 1 ] || [ "$ENABLE_THREAD_SESSION" -eq 1 ] || [ "$ENABLE_REQUIRE_MENTION" -eq 1 ]; then
+    HAS_FEATURE_TOGGLES=1
+fi
+
+if [ "$DO_INSTALL" -eq 0 ] && [ "$DO_APPROVE" -eq 0 ] && [ "$HAS_FEATURE_TOGGLES" -eq 0 ]; then
+    echo "错误: 请至少指定一个操作参数"
+    show_help
+    exit 1
+fi
+
+if ! command -v apptainer &> /dev/null; then
+    echo "错误: 未找到 apptainer"
+    echo "请激活 Apptainer 环境: conda activate apptainer"
+    exit 1
+fi
+
+if [ ! -f "${SIF_FILE}" ]; then
+    echo "错误: SIF文件不存在: ${SIF_FILE}"
+    echo "请将 openclaw-bioinfo-feishu.sif 放到 ${SCRIPT_DIR}"
+    exit 1
+fi
+
+if [ ! -d "${SCRIPT_DIR}/openclaw_config" ]; then
+    echo "错误: 配置目录不存在: ${SCRIPT_DIR}/openclaw_config"
+    exit 1
+fi
+
+run_in_sif() {
+    local cmd="$1"
+    apptainer exec \
+        --no-home \
+        --bind "${SCRIPT_DIR}/openclaw_config:/root/.openclaw" \
+        --bind "${SCRIPT_DIR}/skills:/skills" \
+        --bind "${SCRIPT_DIR}/micromamba_envs:/root/micromamba/envs" \
+        --bind "${SCRIPT_DIR}/micromamba_pkgs:/root/micromamba/pkgs" \
+        --bind "${SCRIPT_DIR}/micromamba_etc:/root/micromamba/etc" \
+        --bind "${SCRIPT_DIR}/pip_packages:/pip_packages" \
+        --bind "${SCRIPT_DIR}/data:/data:ro" \
+        --bind "${SCRIPT_DIR}/work:/work" \
+        "${SIF_FILE}" \
+        /bin/bash -lc "$cmd"
+}
+
+if [ "$DO_INSTALL" -eq 1 ]; then
+    run_in_sif "mkdir -p /work/.npm /work/.cache && export HOME=/root NPM_CONFIG_CACHE=/work/.npm npm_config_cache=/work/.npm XDG_CACHE_HOME=/work/.cache && npx -y @larksuite/openclaw-lark install"
+fi
+
+if [ "$HAS_FEATURE_TOGGLES" -eq 1 ]; then
+    CONFIG_CMDS=()
+    [ "$ENABLE_STREAMING" -eq 1 ] && CONFIG_CMDS+=("openclaw config set channels.feishu.streaming true")
+    if [ "$ENABLE_CARD_MORE" -eq 1 ]; then
+        CONFIG_CMDS+=("openclaw config set channels.feishu.footer.elapsed true")
+        CONFIG_CMDS+=("openclaw config set channels.feishu.footer.status true")
+    fi
+    [ "$ENABLE_THREAD_SESSION" -eq 1 ] && CONFIG_CMDS+=("openclaw config set channels.feishu.threadSession true")
+    [ "$ENABLE_REQUIRE_MENTION" -eq 1 ] && CONFIG_CMDS+=("openclaw config set channels.feishu.requireMention true")
+
+    CONFIG_SCRIPT=""
+    for c in "${CONFIG_CMDS[@]}"; do
+        if [ -z "$CONFIG_SCRIPT" ]; then
+            CONFIG_SCRIPT="$c"
+        else
+            CONFIG_SCRIPT="$CONFIG_SCRIPT && $c"
+        fi
+    done
+
+    run_in_sif "mkdir -p /work/.cache && export HOME=/root XDG_CACHE_HOME=/work/.cache && $CONFIG_SCRIPT"
+    echo "已应用飞书配置，建议重启 gateway 生效。"
+fi
+
+if [ "$DO_APPROVE" -eq 1 ]; then
+    run_in_sif "mkdir -p /work/.cache && export HOME=/root XDG_CACHE_HOME=/work/.cache && openclaw pairing approve feishu '${APPROVE_ID}'"
+fi
+FEISHUSCRIPT
+
+    chmod +x "$feishu_script"
+
+    success "飞书管理脚本生成完成: $feishu_script"
 }
 
 # 显示安装完成信息
@@ -399,24 +610,29 @@ show_completion() {
     echo "  ├── work/                # 工作目录"
     echo "  ├── micromamba_*/        # Conda 环境"
     echo "  ├── pip_packages/        # pip 安装的包"
-    echo "  ├── openclaw-bioinfo-slim.sif  # SIF 文件 (需放置)"
-    echo "  └── run_openclaw_bioinfo.sh  # 启动脚本"
+    echo "  ├── openclaw-bioinfo-feishu.sif  # SIF 文件 (需放置)"
+    echo "  ├── run_openclaw_bioinfo.sh  # 启动脚本"
+    echo "  └── run_openclaw_add_feishu.sh  # 飞书安装/审批/开关脚本"
     echo ""
     echo "下一步:"
     echo "  1. 编辑配置文件，填入 API 信息:"
     echo "     ${INSTALL_DIR}/openclaw_config/openclaw.json"
     echo ""
-    echo "  2. 将 openclaw-bioinfo-slim.sif 文件复制到:"
+    echo "  2. 将 openclaw-bioinfo-feishu.sif 文件复制到:"
     echo "     ${INSTALL_DIR}/"
     echo ""
     echo "  3. 如需挂载额外目录，编辑 run_openclaw_bioinfo.sh"
-    echo "     参考脚本中第 49-52 行的示例"
+    echo "     参考脚本中的挂载示例注释"
     echo ""
     echo "  4. 运行启动脚本:"
     echo "     cd ${INSTALL_DIR}"
-    echo "     ./run_openclaw_bioinfo.sh              # TUI 模式 (默认)"
-    echo "     ./run_openclaw_bioinfo.sh --dashboard    # Dashboard 模式"
+    echo "     ./run_openclaw_bioinfo.sh               # TUI 模式 (默认)"
+    echo "     ./run_openclaw_bioinfo.sh --pinchchat   # PinchChat 模式"
+    echo "     ./run_openclaw_bioinfo.sh --gateway     # 仅启动 Gateway（飞书推荐）"
     echo ""
+    echo "  5. 配置飞书插件（可选）:"
+    echo "     ./run_openclaw_add_feishu.sh --install"
+    echo "     ./run_openclaw_add_feishu.sh --open_all"
 }
 
 # 主函数
@@ -450,6 +666,7 @@ main() {
     
     generate_config
     generate_run_script
+    generate_feishu_script
     show_completion
 }
 

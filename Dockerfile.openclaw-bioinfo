@@ -8,7 +8,7 @@ USER root
 
 LABEL maintainer="yuxin.jia"
 LABEL description="OpenClaw with bioinformatics tools - slim version"
-LABEL version="3.0.0-slim"
+LABEL version="3.1.0-slim"
 
 # ============================================
 # 安装系统依赖
@@ -21,7 +21,13 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     zlib1g-dev \
     default-jre \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
+
+# ============================================
+# 安装 PinchChat 静态文件
+# ============================================
+COPY pinchchat-dist /var/www/pinchchat
 
 # ============================================
 # 安装Micromamba（使用本地文件）

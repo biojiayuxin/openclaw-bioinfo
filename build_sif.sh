@@ -1,7 +1,7 @@
 #!/bin/bash
 
 BUILD_DIR="/mnt/data_1/yuxin.jia/openclaw_test"
-SIF_OUTPUT="${BUILD_DIR}/openclaw-bioinfo.sif"
+SIF_OUTPUT="${BUILD_DIR}/openclaw-bioinfo-slim.sif"
 
 echo "=========================================="
 echo "打包 OpenClaw 生信分析环境为 SIF 文件"
@@ -38,7 +38,9 @@ if [ $? -eq 0 ]; then
     ls -lh "${SIF_OUTPUT}"
     echo ""
     echo "运行测试:"
-    echo "  ${BUILD_DIR}/run_sif.sh"
+    echo "  cd ${BUILD_DIR}"
+    echo "  ./run_openclaw_bioinfo.sh --pinchchat"
+    echo "  # 或 ./run_openclaw_bioinfo.sh --dashboard"
 else
     echo ""
     echo "构建失败，请检查错误信息"

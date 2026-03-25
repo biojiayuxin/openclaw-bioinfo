@@ -317,7 +317,8 @@ fi
 
 echo "SIF文件: ${SIF_FILE}"
 echo "配置目录: ${SCRIPT_DIR}"
-echo "Gateway 端口: ${GATEWAY_PORT}"
+echo "Gateway 首选端口: ${GATEWAY_PORT}"
+echo "实际端口请以容器内输出为准（若首选端口被占用会自动切换）"
 echo ""
 
 # ============================================

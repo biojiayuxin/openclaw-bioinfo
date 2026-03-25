@@ -111,7 +111,10 @@ wait_gateway_ready() {
 start_gateway() {
     local preferred_port=$1
     GATEWAY_PORT=$(find_available_port "$preferred_port")
-    
+
+    if [ "$GATEWAY_PORT" != "$preferred_port" ]; then
+        echo "检测到首选端口 ${preferred_port} 已占用，自动切换到 ${GATEWAY_PORT}"
+    fi
     echo "启动 Gateway (端口: ${GATEWAY_PORT})..."
     
     export OPENCLAW_GATEWAY_PORT="$GATEWAY_PORT"
@@ -148,6 +151,7 @@ print_usage() {
     echo "=========================================="
     echo ""
     echo "Gateway 已启动: http://127.0.0.1:${GATEWAY_PORT}"
+    echo "当前实际 Gateway 端口: ${GATEWAY_PORT}"
     echo "Dashboard: http://127.0.0.1:${GATEWAY_PORT}?token=${TOKEN}"
     echo "Token: ${TOKEN}"
     echo ""

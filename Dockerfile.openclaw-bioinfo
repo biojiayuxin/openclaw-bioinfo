@@ -7,8 +7,8 @@ FROM alpine/openclaw:latest
 USER root
 
 LABEL maintainer="yuxin.jia"
-LABEL description="OpenClaw with bioinformatics tools - slim version"
-LABEL version="3.1.0-slim"
+LABEL description="OpenClaw with bioinformatics tools"
+LABEL version="0.2"
 
 # ============================================
 # 安装系统依赖
@@ -85,7 +85,8 @@ WORKDIR /workspace
 # 设置环境变量
 # ============================================
 ENV MICROMAMBA_ROOT_PREFIX=/root/micromamba
-ENV OPENCLAW_MODE=${OPENCLAW_MODE:-tui}
+ENV GATEWAY_PORT=18789
+ENV PINCHCHAT_PORT=18080
 
 # ============================================
 # 添加启动脚本

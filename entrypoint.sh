@@ -6,59 +6,80 @@ export PATH="/pip_packages/bin:/root/micromamba/envs/bioenv/bin:/usr/local/bin:/
 export OPENCLAW_CONFIG_PATH="/root/.openclaw/openclaw.json"
 export HOME="/root"
 
-PINCHCHAT_PORT="${PINCHCHAT_PORT:-8080}"
-OPENCLAW_MODE="${OPENCLAW_MODE:-tui}"
+PINCHCHAT_PORT="${PINCHCHAT_PORT:-18080}"
+GATEWAY_PORT="${GATEWAY_PORT:-18789}"
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -p|--pinchchat)
-            OPENCLAW_MODE="pinchchat"
-            shift
-            ;;
-        -d|--dashboard)
-            OPENCLAW_MODE="dashboard"
-            shift
-            ;;
-        -t|--tui)
-            OPENCLAW_MODE="tui"
-            shift
-            ;;
-        -h|--help)
-            echo "用法: openclaw-bioinfo [选项]"
-            echo ""
-            echo "选项:"
-            echo "  -p, --pinchchat   启动 PinchChat 模式 (双端口，推荐测试方案)"
-            echo "  -d, --dashboard   启动 Dashboard 模式 (Web界面，兜底)"
-            echo "  -t, --tui         启动 TUI 模式 (终端界面，默认)"
-            echo "  -h, --help        显示此帮助信息"
-            echo ""
-            echo "环境变量:"
-            echo "  OPENCLAW_MODE      设置启动模式 (tui/dashboard/pinchchat)"
-            echo "  PINCHCHAT_PORT     PinchChat 静态页面端口 (默认 8080)"
-            echo ""
-            exit 0
-            ;;
-        *)
-            echo "未知选项: $1"
-            echo "使用 -h 或 --help 查看帮助"
-            exit 1
-            ;;
-    esac
-done
+GATEWAY_PID=""
+PINCHCHAT_PID=""
+CLEANUP_DONE=0
 
 cleanup() {
+    local exit_code=${1:-$?}
+
+    if [ "$CLEANUP_DONE" -eq 1 ]; then
+        return
+    fi
+    CLEANUP_DONE=1
+
     echo ""
     echo "正在关闭服务..."
-    kill "$GATEWAY_PID" 2>/dev/null
-    kill "$PINCHCHAT_PID" 2>/dev/null
-    exit 0
+
+    openclaw gateway stop >/dev/null 2>&1 || true
+
+    [ -n "$GATEWAY_PID" ] && kill "$GATEWAY_PID" 2>/dev/null || true
+    [ -n "$PINCHCHAT_PID" ] && kill "$PINCHCHAT_PID" 2>/dev/null || true
+
+    return "$exit_code"
 }
 
-trap cleanup EXIT INT TERM
+trap 'cleanup $?' EXIT
+trap 'exit 130' INT TERM
 
-echo "=========================================="
-echo "OpenClaw 生信分析环境"
-echo "=========================================="
+check_port_available() {
+    local port=$1
+
+    if command -v ss >/dev/null 2>&1; then
+        ! ss -tln 2>/dev/null | grep -q ":${port} "
+        return $?
+    fi
+
+    if command -v netstat >/dev/null 2>&1; then
+        ! netstat -tln 2>/dev/null | grep -q ":${port} "
+        return $?
+    fi
+
+    python3 - "$port" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+try:
+    sock.bind(("0.0.0.0", port))
+    sys.exit(0)
+except OSError:
+    sys.exit(1)
+finally:
+    sock.close()
+PY
+}
+
+find_available_port() {
+    local start_port=$1
+    local max_attempts=100
+    local port=$start_port
+    
+    for i in $(seq 1 $max_attempts); do
+        if check_port_available "$port"; then
+            echo "$port"
+            return 0
+        fi
+        port=$((port + 1))
+    done
+    echo "$start_port"
+}
 
 get_server_info() {
     SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -78,108 +99,90 @@ wait_gateway_ready() {
     WAIT_COUNT=0
     while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
         if curl -s "http://127.0.0.1:${port}/healthz" > /dev/null 2>&1; then
-            echo ""
-            echo "Gateway 已就绪 (PID: $GATEWAY_PID)"
             return 0
         fi
         sleep 1
         WAIT_COUNT=$((WAIT_COUNT + 1))
         printf "\r等待 Gateway 启动中... %ds/%ds" "$WAIT_COUNT" "$MAX_WAIT"
     done
-
-    echo ""
-    echo "警告: Gateway 启动超时，但进程仍在后台运行"
-    echo "Gateway PID: $GATEWAY_PID"
     return 1
 }
 
 start_gateway() {
-    local port=$1
-    echo ""
-    echo "启动 Gateway (端口: ${port})..."
-
-    export OPENCLAW_GATEWAY_PORT="$port"
-    sed -i "s/\"port\"[[:space:]]*:[[:space:]]*[0-9]*/\"port\": $port/" /root/.openclaw/openclaw.json 2>/dev/null
-
+    local preferred_port=$1
+    GATEWAY_PORT=$(find_available_port "$preferred_port")
+    
+    echo "启动 Gateway (端口: ${GATEWAY_PORT})..."
+    
+    export OPENCLAW_GATEWAY_PORT="$GATEWAY_PORT"
+    sed -i "s/\"port\"[[:space:]]*:[[:space:]]*[0-9]*/\"port\": $GATEWAY_PORT/" /root/.openclaw/openclaw.json 2>/dev/null
+    
     openclaw gateway &
     GATEWAY_PID=$!
-
-    wait_gateway_ready "$port"
+    
+    if wait_gateway_ready "$GATEWAY_PORT"; then
+        echo "Gateway 已就绪 (PID: $GATEWAY_PID, 端口: $GATEWAY_PORT)"
+    else
+        echo "警告: Gateway 启动超时，进程 PID: $GATEWAY_PID"
+    fi
 }
 
-start_pinchchat_static() {
-    echo ""
-    echo "启动 PinchChat 静态页面服务 (端口: ${PINCHCHAT_PORT})..."
+start_pinchchat() {
+    PINCHCHAT_PORT=$(find_available_port "${PINCHCHAT_PORT:-18080}")
+    echo "启动 PinchChat 静态服务 (端口: ${PINCHCHAT_PORT})..."
     python3 -m http.server "$PINCHCHAT_PORT" --directory /var/www/pinchchat >/tmp/pinchchat-http.log 2>&1 &
     PINCHCHAT_PID=$!
     sleep 1
+    echo "PinchChat 服务已启动 (PID: $PINCHCHAT_PID)"
+    echo ""
+    echo "本地访问: http://127.0.0.1:${PINCHCHAT_PORT}"
+    echo "Gateway: ws://127.0.0.1:${GATEWAY_PORT}"
+    echo "Token: ${TOKEN}"
 }
 
-if [ "${OPENCLAW_MODE}" = "pinchchat" ]; then
-    start_gateway 18789
-    start_pinchchat_static
-
-    if [ "${OPENCLAW_SILENT_PROMPT}" != "1" ]; then
-        get_server_info
-        echo ""
-        echo "=========================================="
-        echo "PinchChat 模式（双端口）"
-        echo "=========================================="
-        echo ""
-        echo "PinchChat 页面端口: ${PINCHCHAT_PORT}"
-        echo "Gateway 端口: 18789"
-        echo ""
-        echo "远程访问步骤:"
-        echo ""
-        echo "1. 在本地终端执行端口转发:"
-        echo "   ssh -L 28080:127.0.0.1:${PINCHCHAT_PORT} -L 28789:127.0.0.1:18789 -p <SSH端口> <用户名>@${SERVER_IP}"
-        echo ""
-        echo "2. 在本地浏览器访问 PinchChat 页面:"
-        echo "   http://127.0.0.1:28080"
-        echo ""
-        echo "3. 在 PinchChat 登录页填写:"
-        echo "   网关地址: ws://127.0.0.1:28789"
-        echo "   令牌: ${TOKEN}"
-        echo ""
-        echo "4. 首次使用如需配对审批:"
-        echo "   ./run_openclaw_devices.sh approve-latest"
-        echo ""
-        echo "按 Ctrl+C 退出"
-        echo ""
-    fi
-
-    wait "$GATEWAY_PID"
-
-elif [ "${OPENCLAW_MODE}" = "dashboard" ]; then
-    start_gateway 18789
-
-    if [ "${OPENCLAW_SILENT_PROMPT}" != "1" ]; then
-        get_server_info
-        echo ""
-        echo "=========================================="
-        echo "Dashboard 模式"
-        echo "=========================================="
-        echo ""
-        echo "Gateway 已在端口 18789 启动"
-        echo ""
-        echo "远程访问步骤:"
-        echo ""
-        echo "1. 在本地终端执行端口转发:"
-        echo "   ssh -L 18789:127.0.0.1:18789 -p <SSH端口> <用户名>@${SERVER_IP}"
-        echo ""
-        echo "2. 在本地浏览器访问:"
-        echo "   http://127.0.0.1:18789?token=${TOKEN}"
-        echo ""
-        echo "按 Ctrl+C 退出"
-        echo ""
-    fi
-
-    wait "$GATEWAY_PID"
-
-else
-    start_gateway 18789
+print_usage() {
+    get_server_info
     echo ""
-    echo "启动 OpenClaw TUI..."
+    echo "=========================================="
+    echo " OpenClaw 生信分析环境"
+    echo "=========================================="
     echo ""
-    openclaw tui
-fi
+    echo "Gateway 已启动: http://127.0.0.1:${GATEWAY_PORT}"
+    echo "Dashboard: http://127.0.0.1:${GATEWAY_PORT}?token=${TOKEN}"
+    echo "Token: ${TOKEN}"
+    echo ""
+    echo "默认行为: 当前仅启动 Gateway，并保持在容器交互环境。"
+    echo ""
+    echo "容器内可用命令:"
+    echo "  openclaw tui          启动 TUI 终端界面"
+    echo "  start-pinchchat       启动 PinchChat Web 界面"
+    echo ""
+    echo "飞书接入:"
+    echo "  npx -y @larksuite/openclaw-lark install    安装飞书插件"
+    echo "  openclaw pairing approve feishu <id>        审批飞书配对"
+    echo ""
+    echo "远程访问 (SSH 端口转发):"
+    echo "  # Gateway / Dashboard"
+    echo "  ssh -L ${GATEWAY_PORT}:127.0.0.1:${GATEWAY_PORT} -p <SSH端口> <用户>@${SERVER_IP}"
+    echo "  # PinchChat (先在容器内执行 start-pinchchat，再转发页面端口)"
+    echo "  ssh -L <本地页面端口>:127.0.0.1:<容器内PinchChat端口> -p <SSH端口> <用户>@${SERVER_IP}"
+    echo ""
+    echo "输入 'help' 查看更多命令，'exit' 退出容器"
+    echo ""
+}
+
+export -f find_available_port
+export -f start_pinchchat
+export PINCHCHAT_PORT GATEWAY_PORT
+
+start_gateway "$GATEWAY_PORT"
+print_usage
+
+/bin/bash --rcfile <(echo '
+PS1="\[\033[1;32m\]openclaw\[\033[0m\]:\w\$ "
+alias start-pinchchat="start_pinchchat"
+alias help="echo \"\"; echo \"默认行为:\"; echo \"  已自动启动 Gateway，并保持在容器交互环境\"; echo \"\"; echo \"可用命令:\"; echo \"  openclaw tui     - 启动 TUI 终端界面\"; echo \"  start-pinchchat  - 启动 PinchChat Web 界面\"; echo \"  openclaw --help  - 查看 openclaw 帮助\"; echo \"\"; echo \"飞书接入:\"; echo \"  npx -y @larksuite/openclaw-lark install\"; echo \"  openclaw pairing approve feishu <id>\"; echo \"\"; echo \"端口信息:\"; echo \"  Gateway: $GATEWAY_PORT\"; echo \"\""
+')
+SHELL_EXIT_CODE=$?
+cleanup "$SHELL_EXIT_CODE"
+exit "$SHELL_EXIT_CODE"

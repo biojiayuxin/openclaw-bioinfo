@@ -5,6 +5,7 @@
 当前已完成并验证：
 - 已移除 PinchChat 内置集成，镜像回归纯净 OpenClaw；用户按需在容器内自行安装插件
 - 默认启动仅拉起 Gateway，其他能力按需在容器内安装和启用
+- Gateway 后台日志已重定向到文件，避免持续占用容器交互终端
 - 已集成飞书官方插件安装与审批指引，支持飞书快速部署
 - 支持自动查找可用端口
 - 已验证 `build.sh` 与 `build_sif.sh` 可成功构建
@@ -83,6 +84,12 @@ help
 
 # 启动 TUI 终端界面
 openclaw tui
+
+# 实时查看 Gateway 日志
+logs-gw
+
+# 查看 Gateway 最近 200 行日志
+logs-gw-last
 
 # 安装飞书插件
 npx -y @larksuite/openclaw-lark install

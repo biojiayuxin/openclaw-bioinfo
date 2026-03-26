@@ -7,6 +7,7 @@ export OPENCLAW_CONFIG_PATH="/root/.openclaw/openclaw.json"
 export HOME="/root"
 
 GATEWAY_PORT="${GATEWAY_PORT:-18789}"
+GATEWAY_STDOUT_LOG="/tmp/openclaw/gateway.stdout.log"
 
 GATEWAY_PID=""
 CLEANUP_DONE=0
@@ -116,8 +117,11 @@ start_gateway() {
     
     export OPENCLAW_GATEWAY_PORT="$GATEWAY_PORT"
     sed -i "s/\"port\"[[:space:]]*:[[:space:]]*[0-9]*/\"port\": $GATEWAY_PORT/" /root/.openclaw/openclaw.json 2>/dev/null
-    
-    openclaw gateway &
+
+    mkdir -p "$(dirname "$GATEWAY_STDOUT_LOG")"
+    : > "$GATEWAY_STDOUT_LOG"
+
+    openclaw gateway >> "$GATEWAY_STDOUT_LOG" 2>&1 &
     GATEWAY_PID=$!
     
     if wait_gateway_ready "$GATEWAY_PORT"; then
@@ -138,11 +142,14 @@ print_usage() {
     echo "当前实际 Gateway 端口: ${GATEWAY_PORT}"
     echo "Dashboard: http://127.0.0.1:${GATEWAY_PORT}?token=${TOKEN}"
     echo "Token: ${TOKEN}"
+    echo "Gateway 日志: ${GATEWAY_STDOUT_LOG}"
     echo ""
     echo "默认行为: 当前仅启动 Gateway，并保持在容器交互环境。"
     echo ""
     echo "容器内可用命令:"
     echo "  openclaw tui          启动 TUI 终端界面"
+    echo "  logs-gw               实时查看 Gateway 日志"
+    echo "  logs-gw-last          查看 Gateway 最近 200 行日志"
     echo ""
     echo "飞书接入:"
     echo "  npx -y @larksuite/openclaw-lark install    安装飞书插件"
@@ -159,15 +166,18 @@ print_usage() {
 
 export -f check_port_available
 export -f find_available_port
-export GATEWAY_PORT TOKEN SERVER_IP
+export GATEWAY_PORT GATEWAY_STDOUT_LOG TOKEN SERVER_IP
 
 start_gateway "$GATEWAY_PORT"
 print_usage
 
 /bin/bash --rcfile <(echo '
+shopt -s expand_aliases
 PS1="\[\033[1;32m\]openclaw\[\033[0m\]:\w\$ "
-alias help="echo \"\"; echo \"默认行为:\"; echo \"  已自动启动 Gateway，并保持在容器交互环境\"; echo \"\"; echo \"可用命令:\"; echo \"  openclaw tui     - 启动 TUI 终端界面\"; echo \"  openclaw --help  - 查看 openclaw 帮助\"; echo \"\"; echo \"飞书接入:\"; echo \"  npx -y @larksuite/openclaw-lark install\"; echo \"  openclaw pairing approve feishu <id>\"; echo \"\"; echo \"端口信息:\"; echo \"  Gateway: $GATEWAY_PORT\"; echo \"\""
-')
+logs-gw() { tail -f "$GATEWAY_STDOUT_LOG"; }
+logs-gw-last() { tail -n 200 "$GATEWAY_STDOUT_LOG"; }
+alias help="echo \"\"; echo \"默认行为:\"; echo \"  已自动启动 Gateway，并保持在容器交互环境\"; echo \"\"; echo \"可用命令:\"; echo \"  openclaw tui      - 启动 TUI 终端界面\"; echo \"  logs-gw          - 实时查看 Gateway 日志\"; echo \"  logs-gw-last     - 查看 Gateway 最近 200 行日志\"; echo \"  openclaw --help  - 查看 openclaw 帮助\"; echo \"\"; echo \"飞书接入:\"; echo \"  npx -y @larksuite/openclaw-lark install\"; echo \"  openclaw pairing approve feishu <id>\"; echo \"\"; echo \"端口信息:\"; echo \"  Gateway: $GATEWAY_PORT\"; echo \"  日志: $GATEWAY_STDOUT_LOG\"; echo \"\""
+') -i
 SHELL_EXIT_CODE=$?
 cleanup "$SHELL_EXIT_CODE"
 exit "$SHELL_EXIT_CODE"

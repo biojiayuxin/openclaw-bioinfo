@@ -273,6 +273,8 @@ if [[ $# -gt 0 ]]; then
             echo ""
             echo "容器内常用命令:"
             echo "  openclaw tui                                  启动 TUI 终端界面"
+            echo "  logs-gw                                       实时查看 Gateway 日志"
+            echo "  logs-gw-last                                  查看 Gateway 最近 200 行日志"
             echo "  npx -y @larksuite/openclaw-lark install       安装飞书插件"
             echo "  openclaw pairing approve feishu <id>          审批飞书配对"
             exit 0
@@ -381,6 +383,8 @@ show_completion() {
     echo ""
     echo "  5. 容器内可用命令:"
     echo "     openclaw tui          # 启动 TUI 终端界面"
+    echo "     logs-gw              # 实时查看 Gateway 日志"
+    echo "     logs-gw-last         # 查看 Gateway 最近 200 行日志"
     echo ""
     echo "  6. 飞书接入 (在容器内执行):"
     echo "     npx -y @larksuite/openclaw-lark install"

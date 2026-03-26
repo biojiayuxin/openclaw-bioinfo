@@ -40,7 +40,7 @@ if [ $? -eq 0 ]; then
     echo "运行测试:"
     echo "  cd ${BUILD_DIR}"
     echo "  ./run_openclaw_bioinfo.sh"
-    echo "  # 容器内可执行: openclaw tui / start-pinchchat"
+    echo "  # 容器内可执行: openclaw tui"
 else
     echo ""
     echo "构建失败，请检查错误信息"

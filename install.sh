@@ -259,7 +259,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SIF_FILE="${SCRIPT_DIR}/openclaw-bioinfo.sif"
 
 GATEWAY_PORT="${GATEWAY_PORT:-18789}"
-PINCHCHAT_PORT="${PINCHCHAT_PORT:-18080}"
 
 if [[ $# -gt 0 ]]; then
     case "$1" in
@@ -268,14 +267,12 @@ if [[ $# -gt 0 ]]; then
             echo ""
             echo "环境变量:"
             echo "  GATEWAY_PORT     Gateway 首选端口 (默认: 18789, 若占用会自动顺延)"
-            echo "  PINCHCHAT_PORT   PinchChat 首选端口 (默认: 18080, 若占用会自动顺延)"
             echo ""
             echo "说明:"
             echo "  启动后默认仅拉起 OpenClaw Gateway，并进入容器交互模式。"
             echo ""
             echo "容器内常用命令:"
             echo "  openclaw tui                                  启动 TUI 终端界面"
-            echo "  start-pinchchat                               启动 PinchChat Web 界面"
             echo "  npx -y @larksuite/openclaw-lark install       安装飞书插件"
             echo "  openclaw pairing approve feishu <id>          审批飞书配对"
             exit 0
@@ -330,7 +327,6 @@ echo ""
 apptainer run \
     --no-home \
     --env GATEWAY_PORT="${GATEWAY_PORT}" \
-    --env PINCHCHAT_PORT="${PINCHCHAT_PORT}" \
     --bind "${SCRIPT_DIR}/openclaw_config:/root/.openclaw" \
     --bind "${SCRIPT_DIR}/skills:/skills" \
     --bind "${SCRIPT_DIR}/micromamba_envs:/root/micromamba/envs" \
@@ -385,7 +381,6 @@ show_completion() {
     echo ""
     echo "  5. 容器内可用命令:"
     echo "     openclaw tui          # 启动 TUI 终端界面"
-    echo "     start-pinchchat       # 启动 PinchChat Web 界面"
     echo ""
     echo "  6. 飞书接入 (在容器内执行):"
     echo "     npx -y @larksuite/openclaw-lark install"

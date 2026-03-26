@@ -2,17 +2,42 @@
 
 本项目提供两种使用方式：
 
-1. **本地克隆代码自行构建**（Docker -> SIF）
-2. **直接从 Figshare 下载 SIF + install.sh 快速安装**
+1. **直接从 GitHub Releases 下载 SIF + install.sh 快速安装**
+2. **本地克隆代码自行构建**（Docker -> SIF）
 
 ---
 
-## 方式一：本地构建（推荐给需要二次定制的用户）
+## 方式一：从 GitHub Releases 直接下载（推荐给普通用户）
+
+从 GitHub Releases 页面下载以下文件：
+
+- Releases 页面：`https://github.com/biojiayuxin/openclaw-bioinfo/releases`
+
+- `openclaw-bioinfo.sif`
+- `install.sh`
+
+然后执行：
+
+```bash
+chmod +x install.sh
+./install.sh -d <安装目录>
+```
+
+把下载的 `openclaw-bioinfo.sif` 放到安装目录后，运行：
+
+```bash
+cd <安装目录>
+./run_openclaw_bioinfo.sh
+```
+
+---
+
+## 方式二：本地构建（推荐给需要二次定制的用户）
 
 ### 1) 克隆代码
 
 ```bash
-git clone <你的仓库地址>
+git clone https://github.com/biojiayuxin/openclaw-bioinfo.git
 cd openclaw_test
 ```
 
@@ -44,29 +69,6 @@ cd openclaw_test
 - `run_openclaw_bioinfo.sh`
 
 ### 5) 运行
-
-```bash
-cd <安装目录>
-./run_openclaw_bioinfo.sh
-```
-
----
-
-## 方式二：从 Figshare 直接下载（推荐给普通用户）
-
-从 Figshare 下载以下文件（下载地址请自行补充）：
-
-- `openclaw-bioinfo.sif`
-- `install.sh`
-
-然后执行：
-
-```bash
-chmod +x install.sh
-./install.sh -d <安装目录>
-```
-
-把下载的 `openclaw-bioinfo.sif` 放到安装目录后，运行：
 
 ```bash
 cd <安装目录>

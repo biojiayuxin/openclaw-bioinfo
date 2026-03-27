@@ -5,6 +5,8 @@ export PYTHONUSERBASE=/pip_packages
 export PATH="/pip_packages/bin:/root/micromamba/envs/bioenv/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 export OPENCLAW_CONFIG_PATH="/root/.openclaw/openclaw.json"
 export HOME="/root"
+export npm_config_cache="${npm_config_cache:-/tmp/.npm-cache-${UID:-$(id -u)}}"
+mkdir -p "$npm_config_cache" 2>/dev/null || true
 
 GATEWAY_PORT="${GATEWAY_PORT:-18789}"
 OPENCLAW_LOG_BASE_DIR="${OPENCLAW_LOG_BASE_DIR:-/tmp/openclaw-${UID:-$(id -u)}}"

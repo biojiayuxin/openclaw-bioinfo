@@ -2,6 +2,7 @@
 
 BASE_DIR="/mnt/data_1/yuxin.jia/openclaw_test"
 IMAGE_NAME="openclaw-bioinfo:latest"
+OPENCLAW_BASE_IMAGE="${OPENCLAW_BASE_IMAGE:-ghcr.io/openclaw/openclaw:latest}"
 
 echo "=========================================="
 echo "构建 OpenClaw 生信分析环境"
@@ -10,7 +11,10 @@ echo "=========================================="
 cd "$BASE_DIR"
 
 echo "[1/2] 构建 Docker 镜像..."
+echo "使用 OpenClaw 基础镜像: ${OPENCLAW_BASE_IMAGE}"
 docker build \
+    --pull \
+    --build-arg OPENCLAW_BASE_IMAGE="${OPENCLAW_BASE_IMAGE}" \
     -t "$IMAGE_NAME" \
     -f Dockerfile.openclaw-bioinfo \
     .

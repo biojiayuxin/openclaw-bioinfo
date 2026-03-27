@@ -7,7 +7,9 @@ export OPENCLAW_CONFIG_PATH="/root/.openclaw/openclaw.json"
 export HOME="/root"
 
 GATEWAY_PORT="${GATEWAY_PORT:-18789}"
-GATEWAY_STDOUT_LOG="/tmp/openclaw/gateway.stdout.log"
+OPENCLAW_LOG_BASE_DIR="${OPENCLAW_LOG_BASE_DIR:-/tmp/openclaw-${UID:-$(id -u)}}"
+GATEWAY_LOG_SUFFIX="$(date +%Y%m%d-%H%M%S)-$$"
+GATEWAY_STDOUT_LOG="${GATEWAY_STDOUT_LOG:-${OPENCLAW_LOG_BASE_DIR}/gateway.${GATEWAY_LOG_SUFFIX}.stdout.log}"
 
 GATEWAY_PID=""
 CLEANUP_DONE=0

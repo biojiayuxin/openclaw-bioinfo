@@ -30,6 +30,23 @@ cd <安装目录>
 ./run_openclaw_bioinfo.sh
 ```
 
+安装目录会包含并挂载这些持久化目录：
+
+- `openclaw_config/` -> `/openclaw-home/.openclaw`
+- `workspace/` -> `/openclaw-home/workspace`
+- `skills/` -> `/skills`
+- `micromamba_envs/` -> `/openclaw-home/micromamba/envs`
+- `micromamba_pkgs/` -> `/openclaw-home/micromamba/pkgs`
+- `micromamba_etc/` -> `/openclaw-home/micromamba/etc`
+- `pip_packages/` -> `/pip_packages`
+- `data/` -> `/data`（只读）
+- `work/` -> `/work`
+
+说明：
+
+- 容器内 `HOME` 使用 `/openclaw-home`
+- `workspace` 已显式持久化，避免在 Apptainer 场景下出现路径或权限不一致
+
 ---
 
 ## 方式二：本地构建（推荐给需要二次定制的用户）
@@ -67,6 +84,11 @@ cd openclaw_test
 
 - `openclaw-bioinfo.sif`（你需要放入该目录）
 - `run_openclaw_bioinfo.sh`
+- `openclaw_config/`
+- `workspace/`
+- `skills/`
+- `data/`
+- `work/`
 
 ### 5) 运行
 

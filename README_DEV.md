@@ -8,7 +8,8 @@
 - Gateway 后台日志已重定向到文件，避免持续占用容器交互终端
 - 已集成飞书官方插件安装与审批指引，支持飞书快速部署
 - 支持自动查找可用端口
-- 已验证 `build.sh` 与 `build_sif.sh` 可成功构建
+- 已修复 Apptainer 非 root 场景下配置 / workspace 路径不一致导致的 Gateway 启动卡住问题
+- `build.sh`、`install.sh`、运行目录挂载路径已统一到 `/openclaw-home` 布局
 
 ## 代码改动概览
 
@@ -33,10 +34,19 @@ openclaw_test/
 └── README.md                     # 项目说明
 ```
 
-### 3. 安装目录脚本
+### 3. 安装目录结构
 
 安装目录 `openclaw-bioinfo/` 包含：
 
+- `openclaw_config/`：挂载到 `/openclaw-home/.openclaw`
+- `workspace/`：挂载到 `/openclaw-home/workspace`
+- `skills/`：挂载到 `/skills`
+- `micromamba_envs/`：挂载到 `/openclaw-home/micromamba/envs`
+- `micromamba_pkgs/`：挂载到 `/openclaw-home/micromamba/pkgs`
+- `micromamba_etc/`：挂载到 `/openclaw-home/micromamba/etc`
+- `pip_packages/`：挂载到 `/pip_packages`
+- `data/`：挂载到 `/data`（只读）
+- `work/`：挂载到 `/work`
 - `run_openclaw_bioinfo.sh`：启动容器（默认只启动 Gateway 并进入交互模式）
 
 ### 4. 默认端口策略
@@ -65,16 +75,24 @@ cd /mnt/data_1/yuxin.jia/openclaw_test
 
 输出文件：`openclaw-bioinfo.sif`
 
-## 3. Apptainer 运行
+## 3. 安装运行目录
 
 ```bash
-cd openclaw-bioinfo
+./install.sh -d <安装目录>
+```
+
+## 4. Apptainer 运行
+
+```bash
+cd <安装目录>
 ./run_openclaw_bioinfo.sh
 ```
 
 说明：
 - `run_openclaw_bioinfo.sh` 不再接受历史模式参数（如 `--dashboard`）
 - 启动后默认只拉起 Gateway，并留在容器内供你按需执行命令
+- 容器内 `HOME` 使用 `/openclaw-home`
+- `workspace` 显式挂载到 `/openclaw-home/workspace`，避免 Apptainer 环境下自动创建路径带来的权限和持久化问题
 
 启动后进入容器交互模式，可用命令：
 
@@ -98,9 +116,9 @@ npx -y @larksuite/openclaw-lark install
 openclaw pairing approve feishu <feishu_id>
 ```
 
-## 4. 远程访问
+## 5. 远程访问
 
-### 4.1 Gateway / Dashboard
+### 5.1 Gateway / Dashboard
 
 SSH 端口转发说明：
 - `<本地网关端口>`：你本机空闲端口（可自定义，例如 `28888`）
@@ -116,7 +134,7 @@ ssh -L <本地网关端口>:127.0.0.1:<网关端口> -p <SSH端口> <用户名>@
 http://127.0.0.1:<本地网关端口>?token=<token>
 ```
 
-## 5. 飞书快速部署
+## 6. 飞书快速部署
 
 在容器内执行：
 
@@ -130,21 +148,11 @@ openclaw config set channels.feishu.threadSession true
 openclaw config set channels.feishu.requireMention true
 ```
 
-## 首次配对流程
+## 已修复问题
 
-首次启用飞书等渠道后，可能出现 pending 配对请求。
-
-在容器内执行：
-
-```bash
-openclaw pairing list
-openclaw pairing approve <request-id>
-```
-
-## 下一步待解决 BUG
-
-1. [已解决，待持续观察] 退出容器后，Gateway 进程持续运行并占用端口的问题已修复（已增加退出清理流程），后续继续观察是否在不同环境下稳定。
-2. [已解决，待持续观察] `run_openclaw_bioinfo.sh` 启动后会明确区分“首选端口”和“实际端口”，并且 SSH 转发示例会随实际可用端口动态更新。
+1. 退出容器后，Gateway 进程持续运行并占用端口的问题已修复（已增加退出清理流程）。
+2. `run_openclaw_bioinfo.sh` 启动后会明确区分“首选端口”和“实际端口”，并且 SSH 转发示例会随实际可用端口动态更新。
+3. Apptainer 非 root 场景下，原先 `/root/.openclaw/workspace` 与实际可写路径不一致，导致 Gateway 启动等待 180 秒的问题已修复。
 
 ## 兼容性说明
 

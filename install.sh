@@ -108,7 +108,8 @@ check_dependencies() {
 create_directories() {
     info "创建目录结构: $INSTALL_DIR"
     
-    mkdir -p "$INSTALL_DIR"/{openclaw_config,skills}
+    mkdir -p "$INSTALL_DIR"/{openclaw_config,skills,workspace}
+    mkdir -p "$INSTALL_DIR"/openclaw_config/canvas
     mkdir -p "$INSTALL_DIR"/{micromamba_envs,micromamba_pkgs,micromamba_etc}
     mkdir -p "$INSTALL_DIR"/{pip_packages,data,work}
     
@@ -189,7 +190,7 @@ generate_config() {
         "provider-2/YOUR_MODEL_ID_2": {"alias": "model2"},
         "provider-3/YOUR_MODEL_ID_3": {"alias": "model3"}
       },
-      "workspace": "/root/.openclaw/workspace",
+      "workspace": "/openclaw-home/workspace",
       "compaction": {"mode": "safeguard"},
       "thinkingDefault": "medium"
     },
@@ -276,7 +277,6 @@ if [[ $# -gt 0 ]]; then
             echo "  logs-gw                                       实时查看 Gateway 日志"
             echo "  logs-gw-last                                  查看 Gateway 最近 200 行日志"
             echo "  npx -y @larksuite/openclaw-lark install       安装飞书插件"
-            echo "  openclaw pairing approve feishu <id>          审批飞书配对"
             exit 0
             ;;
         *)
@@ -329,11 +329,12 @@ echo ""
 apptainer run \
     --no-home \
     --env GATEWAY_PORT="${GATEWAY_PORT}" \
-    --bind "${SCRIPT_DIR}/openclaw_config:/root/.openclaw" \
+    --bind "${SCRIPT_DIR}/openclaw_config:/openclaw-home/.openclaw" \
     --bind "${SCRIPT_DIR}/skills:/skills" \
-    --bind "${SCRIPT_DIR}/micromamba_envs:/root/micromamba/envs" \
-    --bind "${SCRIPT_DIR}/micromamba_pkgs:/root/micromamba/pkgs" \
-    --bind "${SCRIPT_DIR}/micromamba_etc:/root/micromamba/etc" \
+    --bind "${SCRIPT_DIR}/workspace:/openclaw-home/workspace" \
+    --bind "${SCRIPT_DIR}/micromamba_envs:/openclaw-home/micromamba/envs" \
+    --bind "${SCRIPT_DIR}/micromamba_pkgs:/openclaw-home/micromamba/pkgs" \
+    --bind "${SCRIPT_DIR}/micromamba_etc:/openclaw-home/micromamba/etc" \
     --bind "${SCRIPT_DIR}/pip_packages:/pip_packages" \
     --bind "${SCRIPT_DIR}/data:/data:ro" \
     --bind "${SCRIPT_DIR}/work:/work" \

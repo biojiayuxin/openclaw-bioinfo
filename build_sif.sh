@@ -18,7 +18,7 @@ fi
 # 检查Docker镜像是否存在
 if ! docker images openclaw-bioinfo:latest | grep -q openclaw-bioinfo; then
     echo "错误: Docker镜像 openclaw-bioinfo:latest 不存在"
-    echo "请先运行: docker build -t openclaw-bioinfo:latest -f Dockerfile.openclaw-bioinfo ."
+    echo "请先运行: ./build.sh"
     exit 1
 fi
 
@@ -37,10 +37,10 @@ if [ $? -eq 0 ]; then
     echo "SIF文件: ${SIF_OUTPUT}"
     ls -lh "${SIF_OUTPUT}"
     echo ""
-    echo "运行测试:"
-    echo "  cd ${BUILD_DIR}"
-    echo "  ./run_openclaw_bioinfo.sh"
-    echo "  # 容器内可执行: openclaw tui"
+    echo "下一步:"
+    echo "  1. 运行 ./install.sh -d <安装目录>"
+    echo "  2. 将 ${SIF_OUTPUT} 复制到安装目录"
+    echo "  3. 在安装目录中执行 ./run_openclaw_bioinfo.sh"
 else
     echo ""
     echo "构建失败，请检查错误信息"

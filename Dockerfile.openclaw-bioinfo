@@ -31,11 +31,13 @@ RUN tar -xjf /tmp/micromamba.tar.bz2 -C /tmp && \
 # 创建目录结构
 # ============================================
 RUN mkdir -p /opt/bioenvs \
-             /root/micromamba/envs \
-             /root/.config/openclaw \
-             /root/.local/share/openclaw/skills \
+             /openclaw-home/.openclaw \
+             /openclaw-home/micromamba/envs \
+             /openclaw-home/micromamba/pkgs \
+             /openclaw-home/micromamba/etc \
+             /openclaw-home/workspace \
              /data \
-             /workspace
+              /workspace
 
 # ============================================
 # 配置Micromamba使用国内镜像源
@@ -73,7 +75,9 @@ WORKDIR /workspace
 # ============================================
 # 设置环境变量
 # ============================================
-ENV MICROMAMBA_ROOT_PREFIX=/root/micromamba
+ENV OPENCLAW_APP_HOME=/openclaw-home
+ENV MICROMAMBA_ROOT_PREFIX=/openclaw-home/micromamba
+ENV HOME=/openclaw-home
 ENV GATEWAY_PORT=18789
 
 # ============================================

@@ -1,11 +1,15 @@
 #!/bin/bash
 
-export MICROMAMBA_ROOT_PREFIX=/root/micromamba
+APP_HOME="${OPENCLAW_APP_HOME:-/openclaw-home}"
+OPENCLAW_CONFIG_DIR="${OPENCLAW_CONFIG_DIR:-${APP_HOME}/.openclaw}"
+
+export HOME="$APP_HOME"
+export MICROMAMBA_ROOT_PREFIX="${MICROMAMBA_ROOT_PREFIX:-${APP_HOME}/micromamba}"
 export PYTHONUSERBASE=/pip_packages
-export PATH="/pip_packages/bin:/root/micromamba/envs/bioenv/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-export OPENCLAW_CONFIG_PATH="/root/.openclaw/openclaw.json"
-export HOME="/root"
+export PATH="/pip_packages/bin:${MICROMAMBA_ROOT_PREFIX}/envs/bioenv/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export OPENCLAW_CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-${OPENCLAW_CONFIG_DIR}/openclaw.json}"
 export npm_config_cache="${npm_config_cache:-/tmp/.npm-cache-${UID:-$(id -u)}}"
+mkdir -p "$HOME" "$OPENCLAW_CONFIG_DIR" "$MICROMAMBA_ROOT_PREFIX" "$npm_config_cache" 2>/dev/null || true
 mkdir -p "$npm_config_cache" 2>/dev/null || true
 
 GATEWAY_PORT="${GATEWAY_PORT:-18789}"
@@ -89,7 +93,7 @@ get_server_info() {
         SERVER_IP="<服务器IP>"
     fi
 
-    TOKEN=$(grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' /root/.openclaw/openclaw.json 2>/dev/null | head -1 | sed 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+    TOKEN=$(grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' "$OPENCLAW_CONFIG_PATH" 2>/dev/null | head -1 | sed 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
     if [ -z "$TOKEN" ]; then
         TOKEN="<token>"
     fi
@@ -100,6 +104,9 @@ wait_gateway_ready() {
     MAX_WAIT=${OPENCLAW_GATEWAY_TIMEOUT:-180}
     WAIT_COUNT=0
     while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+        if [ -n "$GATEWAY_PID" ] && ! kill -0 "$GATEWAY_PID" 2>/dev/null; then
+            return 2
+        fi
         if curl -s "http://127.0.0.1:${port}/healthz" > /dev/null 2>&1; then
             return 0
         fi
@@ -112,6 +119,13 @@ wait_gateway_ready() {
 
 start_gateway() {
     local preferred_port=$1
+
+    if [ ! -r "$OPENCLAW_CONFIG_PATH" ]; then
+        echo "错误: OpenClaw 配置文件不可读: $OPENCLAW_CONFIG_PATH"
+        echo "请检查 run_openclaw_bioinfo.sh 中的挂载路径是否存在且当前用户可访问"
+        exit 1
+    fi
+
     GATEWAY_PORT=$(find_available_port "$preferred_port")
 
     if [ "$GATEWAY_PORT" != "$preferred_port" ]; then
@@ -120,16 +134,24 @@ start_gateway() {
     echo "启动 Gateway (端口: ${GATEWAY_PORT})..."
     
     export OPENCLAW_GATEWAY_PORT="$GATEWAY_PORT"
-    sed -i "s/\"port\"[[:space:]]*:[[:space:]]*[0-9]*/\"port\": $GATEWAY_PORT/" /root/.openclaw/openclaw.json 2>/dev/null
+    sed -i "s/\"port\"[[:space:]]*:[[:space:]]*[0-9]*/\"port\": $GATEWAY_PORT/" "$OPENCLAW_CONFIG_PATH" 2>/dev/null || true
 
     mkdir -p "$(dirname "$GATEWAY_STDOUT_LOG")"
     : > "$GATEWAY_STDOUT_LOG"
 
-    openclaw gateway >> "$GATEWAY_STDOUT_LOG" 2>&1 &
+    openclaw gateway run --port "$GATEWAY_PORT" >> "$GATEWAY_STDOUT_LOG" 2>&1 &
     GATEWAY_PID=$!
-    
-    if wait_gateway_ready "$GATEWAY_PORT"; then
+
+    wait_gateway_ready "$GATEWAY_PORT"
+    local wait_status=$?
+
+    if [ "$wait_status" -eq 0 ]; then
         echo "Gateway 已就绪 (PID: $GATEWAY_PID, 端口: $GATEWAY_PORT)"
+    elif [ "$wait_status" -eq 2 ]; then
+        echo "错误: Gateway 进程在就绪前已退出 (PID: $GATEWAY_PID)"
+        echo "最近日志如下:"
+        tail -n 40 "$GATEWAY_STDOUT_LOG" 2>/dev/null || true
+        exit 1
     else
         echo "警告: Gateway 启动超时，进程 PID: $GATEWAY_PID"
     fi
